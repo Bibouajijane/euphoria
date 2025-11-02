@@ -1,0 +1,209 @@
+<?php
+session_start();
+if(!isset($_SESSION['email'])){
+    header("Location: login.php");
+    exit();
+}
+
+$conn = new mysqli("localhost","root","","euphoria");
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+$email = $_SESSION['email'];
+$success_msg = "";
+
+// Fetch existing whitelist request
+$stmt = $conn->prepare("SELECT * FROM whitelist_requests WHERE user_email=? ORDER BY id DESC LIMIT 1");
+$stmt->bind_param("s", $email);
+$stmt->execute();
+$result = $stmt->get_result();
+$request_data = $result->fetch_assoc();
+$stmt->close();
+
+// Determine permissions
+$can_send_new = true; // يقدر يرسل طلب جديد
+$can_update = false;  // يقدر يحدث الطلب
+
+if($request_data){
+    if($request_data['status'] === 'Rejected'){
+        $can_send_new = true; // يقدر يرسل طلب جديد
+        $can_update = false;
+    } elseif($request_data['status'] === 'Pending' || $request_data['status'] === 'Accepted'){
+        $can_send_new = false;
+        $can_update = false; // ما يقدّرش يرسل أو يحدث
+    }
+}
+
+// Handle form submission
+if(isset($_POST['send_request']) && $can_send_new){
+    $gender = $_POST['gender'];
+    $nickname = $_POST['nickname'];
+    $age = $_POST['age'];
+    $experience = $_POST['experience'];
+    $serial = $_POST['serial'];
+    $nationality = $_POST['nationality'];
+    $story = $_POST['story'];
+
+    $stmt = $conn->prepare("INSERT INTO whitelist_requests (user_email, gender, nickname, age, experience, serial, nationality, story, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', NOW())");
+    $stmt->bind_param("ssssssss", $email, $gender, $nickname, $age, $experience, $serial, $nationality, $story);
+    $stmt->execute();
+    $stmt->close();
+    $success_msg = "Whitelist request sent successfully!";
+} elseif(isset($_POST['update_request']) && $can_update){
+    $gender = $_POST['gender'];
+    $nickname = $_POST['nickname'];
+    $age = $_POST['age'];
+    $experience = $_POST['experience'];
+    $serial = $_POST['serial'];
+    $nationality = $_POST['nationality'];
+    $story = $_POST['story'];
+
+    $stmt = $conn->prepare("UPDATE whitelist_requests SET gender=?, nickname=?, age=?, experience=?, serial=?, nationality=?, story=?, status='Pending' WHERE id=?");
+    $stmt->bind_param("sssssssi", $gender, $nickname, $age, $experience, $serial, $nationality, $story, $request_data['id']);
+    $stmt->execute();
+    $stmt->close();
+    $success_msg = "Whitelist request updated successfully!";
+}
+
+// Status color
+$status = $request_data['status'] ?? 'Pending';
+$status_color = '#aaa';
+if($status == 'Accepted') $status_color = '#2ecc71';
+elseif($status == 'Rejected') $status_color = '#e74c3c';
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EUPHORIA RP - Whitelist</title>
+<link rel="icon" type="image/png" href="logo.png">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: url('sc10.jpg') no-repeat center center fixed;
+    background-size: cover;
+    margin: 0;
+    color: #fff;
+    backdrop-filter: blur(6px);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 10px 40px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+}
+
+.header img {
+    height: 50px;
+    border-radius: 50%;
+}
+
+.header nav {
+    display: flex;
+    gap: 15px;
+}
+
+.header nav a {
+    color: white;
+    text-decoration: none;
+    background: #111;
+    padding: 8px 14px;
+    border-radius: 6px;
+    transition: 0.3s;
+    font-size: 14px;
+}
+.header nav a:hover {
+    background: #5865F2;
+}
+
+.container {
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 16px;
+    padding: 30px 40px;
+    width: 520px;
+    margin: 60px auto;
+    box-shadow: 0 0 20px rgba(255,255,255,0.1);
+    animation: fadeIn 0.8s ease-in-out;
+}
+@keyframes fadeIn {
+    from {opacity: 0; transform: scale(0.97);}
+    to {opacity: 1; transform: scale(1);}
+}
+h2 { text-align: center; color: #fff; margin-bottom: 25px; font-weight: 600; letter-spacing: 1px; }
+label { display: block; font-size: 14px; margin-top: 10px; color: #ddd; }
+input, select, textarea { width: 100%; padding: 10px; margin-top: 5px; border: none; border-bottom: 2px solid #555; background: transparent; color: #fff; outline: none; font-size: 15px; transition: 0.3s; }
+input:focus, select:focus, textarea:focus { border-color: #5865F2; }
+textarea { resize: none; height: 100px; }
+button { background: #5865F2; color: white; border: none; padding: 10px; width: 100%; border-radius: 8px; cursor: pointer; font-size: 16px; margin-top: 15px; transition: 0.3s; }
+button:hover { background: #4752C4; }
+button:disabled { background: gray; cursor: not-allowed; }
+.success { background: rgba(46, 204, 113, 0.2); border-left: 4px solid #2ecc71; color: #2ecc71; padding: 10px; border-radius: 8px; margin-bottom: 15px; }
+.status { background: rgba(255,255,255,0.1); padding: 8px; border-radius: 8px; margin-top: 10px; text-align: center; }
+.logout { background: #333; padding: 8px 14px; border-radius: 6px; color: #fff; font-weight: 600; cursor: pointer; transition: 0.3s; }
+.logout:hover { background: #222; }
+</style>
+</head>
+<body>
+
+<header class="header">
+    <img src="logo.png" alt="EUPHORIA Logo">
+    <nav>
+        <a href="dashboard.php">DASHBOARD</a>
+    </nav>
+</header>
+
+<div class="container">
+    <h2>Whitelist Request Form</h2>
+
+    <?php if($success_msg): ?>
+        <div class="success"><?= $success_msg ?></div>
+    <?php endif; ?>
+
+    <div class="status">
+        Current Status: <span style="color: <?= $status_color ?>;"><?= htmlspecialchars($status) ?></span>
+    </div>
+
+    <form method="POST">
+        <label>Gender</label>
+        <select name="gender" required>
+            <option value="">Select Gender</option>
+            <option value="Male" <?php if(isset($request_data['gender']) && $request_data['gender']=='Male') echo "selected";?>>Male</option>
+            <option value="Female" <?php if(isset($request_data['gender']) && $request_data['gender']=='Female') echo "selected";?>>Female</option>
+        </select>
+
+        <label>Character Full Name</label>
+        <input type="text" name="nickname" value="<?= htmlspecialchars($request_data['nickname'] ?? '') ?>" required>
+
+        <label>Age RP</label>
+        <input type="text" placeholder="Your Character Age" name="age" value="<?= htmlspecialchars($request_data['age'] ?? '') ?>" required>
+
+        <label>RP Experience</label>
+        <input type="text" placeholder="How long you been roleplaying ?" name="experience" value="<?= htmlspecialchars($request_data['experience'] ?? '') ?>">
+
+        <label>Serial</label>
+        <input type="text" placeholder="Your MTA Serial (F8)" name="serial" value="<?= htmlspecialchars($request_data['serial'] ?? '') ?>">
+
+        <label>Nationality</label>
+        <input type="text" name="nationality" value="<?= htmlspecialchars($request_data['nationality'] ?? '') ?>">
+
+        <label>Character Story</label>
+        <textarea placeholder="Write your RP story here..." name="story"><?= htmlspecialchars($request_data['story'] ?? '') ?></textarea>
+
+        <?php if(!$request_data || ($request_data && $request_data['status'] === 'Rejected')): ?>
+            <button type="submit" name="send_request">Send Request</button>
+        <?php else: ?>
+            <button type="button" disabled>Cannot send / update request</button>
+        <?php endif; ?>
+    </form>
+
+</div>
+
+</body>
+</html>
